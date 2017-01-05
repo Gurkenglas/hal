@@ -1,19 +1,28 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.Hal where
+module Data.Hal
+  ( Link(..)
+  , Representation(..)
+  , Profile(..)
+  , represent
+  , linkTo
+  ) where
 
 import GHC.Generics
 import Data.Aeson
 import Data.HashMap.Strict
 import Data.Text (Text)
 
-data Link = Link { href    :: Text
-                 , profile :: Maybe Text
-                 } deriving (Show, Generic)
+data Link = Link
+  { href    :: Text
+  , profile :: Maybe Text
+  } deriving (Show, Generic)
 
-data Representation a = Representation (HashMap Text Link) a
-                        deriving (Show, Generic)
+data Representation a = Representation
+  { links :: HashMap Text Link
+  , self :: a
+  } deriving (Show, Generic)
 
 instance FromJSON Link
 instance ToJSON Link
@@ -22,14 +31,12 @@ class Profile a where
   profileOf :: a -> Maybe Text
 
 instance ToJSON a => ToJSON (Representation a) where
-  toJSON (Representation links a) =
-    let (Object jl) = toJSON a
-    in object $ (toList jl) ++ ["_links"  .= links]
+  toJSON rep = let (Object jl) = toJSON $ self rep
+               in object $ (toList jl) ++ ["_links"  .= links rep]
 
 represent :: (Profile a, ToJSON a) => a -> Text -> Representation a
-represent val href' = Representation links val
-  where links = singleton "self" . Link href' $ profileOf val
+represent val href' = Representation ls val
+  where ls = singleton "self" . Link href' $ profileOf val
 
-linkTo :: Text -> Link -> Representation a -> Representation a
-linkTo rel link (Representation links val) = Representation links' val
-  where links' = insert rel link links
+linkTo :: Link -> Text -> Representation a -> Representation a
+linkTo l rel rep = rep { links = insert rel l $ links rep }
