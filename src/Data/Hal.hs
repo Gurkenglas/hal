@@ -3,7 +3,7 @@
 
 module Data.Hal
   ( Link(..)
-  , Representation(..)
+  , Representation
   , Profile(..)
   , represent
   , linkTo
