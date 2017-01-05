@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Data.Hal
   ( Link(..)
@@ -22,21 +23,35 @@ data Link = Link
 instance FromJSON Link
 instance ToJSON Link
 
+type Links = HashMap Text Link
+
 data Representation = Representation
-  { links :: HashMap Text Link
-  , self :: Value
+  { self :: Value
+  , selfRel :: Link
+  , links :: Links
   } deriving (Show, Generic)
 
 class Profile a where
   profileOf :: a -> Maybe Text
 
 instance ToJSON Representation where
-  toJSON rep = let (Object jl) = self rep
-               in object $ (toList jl) ++ ["_links"  .= links rep]
+  toJSON = condenseLinks
+
+condenseLinks :: Representation -> Value
+condenseLinks Representation{..} = case self of
+  Object o -> Object $ insert "_links" (toJSON links') o
+    where links' = addLink selfRel "self" links
+  _ -> error "blargh"
 
 represent :: (Profile a, ToJSON a) => a -> Text -> Representation
-represent val href' = Representation ls $ toJSON val
-  where ls = singleton "self" . Link href' $ profileOf val
+represent val uri = Representation
+  { self = toJSON val
+  , selfRel = Link uri $ profileOf val
+  , links = empty
+  }
 
 linkTo :: Link -> Text -> Representation -> Representation
-linkTo l rel rep = rep { links = insert rel l $ links rep }
+linkTo l rel rep = rep { links = addLink l rel $ links rep }
+
+addLink :: Link -> Text -> Links -> Links
+addLink l rel ls = insert rel l ls
