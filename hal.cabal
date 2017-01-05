@@ -26,8 +26,7 @@ library
                       , text
                       , unordered-containers
   hs-source-dirs:       src
-  exposed-modules:      Data.String.Strip
-                      , Data.Hal
+  exposed-modules:      Data.Hal
 
 test-suite hal-test
   type:                 exitcode-stdio-1.0
