@@ -19,24 +19,24 @@ data Link = Link
   , profile :: Maybe Text
   } deriving (Show, Generic)
 
-data Representation a = Representation
-  { links :: HashMap Text Link
-  , self :: a
-  } deriving (Show, Generic)
-
 instance FromJSON Link
 instance ToJSON Link
+
+data Representation = Representation
+  { links :: HashMap Text Link
+  , self :: Value
+  } deriving (Show, Generic)
 
 class Profile a where
   profileOf :: a -> Maybe Text
 
-instance ToJSON a => ToJSON (Representation a) where
-  toJSON rep = let (Object jl) = toJSON $ self rep
+instance ToJSON Representation where
+  toJSON rep = let (Object jl) = self rep
                in object $ (toList jl) ++ ["_links"  .= links rep]
 
-represent :: (Profile a, ToJSON a) => a -> Text -> Representation a
-represent val href' = Representation ls val
+represent :: (Profile a, ToJSON a) => a -> Text -> Representation
+represent val href' = Representation ls $ toJSON val
   where ls = singleton "self" . Link href' $ profileOf val
 
-linkTo :: Link -> Text -> Representation a -> Representation a
+linkTo :: Link -> Text -> Representation -> Representation
 linkTo l rel rep = rep { links = insert rel l $ links rep }
