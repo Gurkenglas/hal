@@ -5,7 +5,6 @@
 module Data.Hal
   ( Link(..)
   , Representation
-  , Profile(..)
   , represent
   , linkTo
   , embedSingle
@@ -19,17 +18,26 @@ import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.Text (Text)
 
-type URI = Text
+represent :: ToJSON a => a -> URI -> Representation
+represent val uri = Representation
+  { self = toJSON val
+  , selfRel = Link uri
+  , links = empty
+  , embeds = empty
+  }
 
-data Link = Link
-  { href    :: URI
-  , profile :: Maybe Text
-  } deriving (Show, Generic)
+linkTo :: Link -> Text -> Representation -> Representation
+linkTo l rel rep = rep { links = addLink l rel $ links rep }
 
-instance FromJSON Link
-instance ToJSON Link
+embedSingle :: Text -> Representation -> Representation -> Representation
+embedSingle label a rep = rep { embeds = embeds' }
+  where embeds' = insert label (SingletonEmbed a) $ embeds rep
 
-type Links = HashMap Text Link
+embedMulti :: Text -> Representation -> Representation -> Representation
+embedMulti label a rep = rep { embeds = alter f label $ embeds rep }
+  where f Nothing = Just $ EmbedArray $ singleton (href $ selfRel a) a
+        f (Just (EmbedArray m)) = Just $ EmbedArray $ insert (href $ selfRel a) a m
+        f (Just (SingletonEmbed _)) = error "blargh"
 
 data Representation = Representation
   { self :: Value
@@ -38,37 +46,19 @@ data Representation = Representation
   , embeds :: Embeds
   } deriving (Show, Generic)
 
-class Profile a where
-  profileOf :: a -> Maybe URI
-
 instance ToJSON Representation where
   toJSON = self . condenseEmbeds . condenseLinks
 
-condenseEmbeds :: Representation -> Representation
-condenseEmbeds r@Representation{..} = case self of
-  Object o -> r { self = Object $ insert "_embedded" (toJSON embeds) o }
-  _ -> error "blargh"
+type URI = Text
 
-condenseLinks :: Representation -> Representation
-condenseLinks r@Representation{..} = case self of
-  Object o -> r { self = Object $ insert "_links" (toJSON links') o }
-    where links' = addLink selfRel "self" links
-  _ -> error "blargh"
+data Link = Link
+  { href    :: URI
+  } deriving (Show, Generic)
 
-represent :: (Profile a, ToJSON a) => a -> URI -> Representation
-represent val uri = Representation
-  { self = toJSON val
-  , selfRel = Link uri $ profileOf val
-  , links = empty
-  , embeds = empty
-  }
+instance FromJSON Link
+instance ToJSON Link
 
-linkTo :: Link -> Text -> Representation -> Representation
-linkTo l rel rep = rep { links = addLink l rel $ links rep }
-
-addLink :: Link -> Text -> Links -> Links
-addLink l rel ls = insert rel l ls
-
+type Links = HashMap Text Link
 
 type Embeds = HashMap Text EmbedGroup
 
@@ -81,12 +71,16 @@ instance ToJSON EmbedGroup where
   toJSON (SingletonEmbed r) = toJSON r
   toJSON (EmbedArray m) = toJSON $ fmap snd $ sortBy (comparing fst) $ toList m
 
-embedSingle :: Text -> Representation -> Representation -> Representation
-embedSingle label a rep = rep { embeds = embeds' }
-  where embeds' = insert label (SingletonEmbed a) $ embeds rep
+condenseEmbeds :: Representation -> Representation
+condenseEmbeds r@Representation{..} = case self of
+  Object o -> r { self = Object $ insert "_embedded" (toJSON embeds) o }
+  _ -> error "blargh"
 
-embedMulti :: Text -> Representation -> Representation -> Representation
-embedMulti label a rep = rep { embeds = alter f label $ embeds rep }
-  where f Nothing = Just $ EmbedArray $ singleton (href $ selfRel a) a
-        f (Just (EmbedArray m)) = Just $ EmbedArray $ insert (href $ selfRel a) a m
-        f (Just (SingletonEmbed _)) = error "blargh"
+condenseLinks :: Representation -> Representation
+condenseLinks r@Representation{..} = case self of
+  Object o -> r { self = Object $ insert "_links" (toJSON links') o }
+    where links' = addLink selfRel "self" links
+  _ -> error "blargh"
+
+addLink :: Link -> Text -> Links -> Links
+addLink l rel ls = insert rel l ls
