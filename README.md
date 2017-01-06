@@ -1,4 +1,4 @@
 HAL
 ===
 
-Generate application/hal+json representations of nested data structures.
+Construct application/hal+json representations of data structures.
