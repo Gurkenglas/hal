@@ -3,11 +3,14 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Data.Hal
-  ( Link
+  ( Rel
+  , URI
+  , Link
   , link
   , Representation
   , represent
-  , linkTo
+  , linkSingle
+  , linkMulti
   , embedSingle
   , embedMulti
   ) where
@@ -30,8 +33,14 @@ represent val uri = Representation
 link :: URI -> Link
 link = Link
 
-linkTo :: Rel -> Link -> Representation -> Representation
-linkTo rel l rep = rep { links = addLink l rel $ links rep }
+linkSingle :: Rel -> Link -> Representation -> Representation
+linkSingle rel l rep = rep { links = insert rel (SingletonLink l) $ links rep }
+
+linkMulti :: Rel -> Link -> Representation -> Representation
+linkMulti rel l rep = rep { links = alter f rel $ links rep }
+  where f Nothing = Just $ LinkArray $ singleton (href l) l
+        f (Just (LinkArray m)) = Just $ LinkArray $ insert (href l) l m
+        f (Just (SingletonLink _)) = error "blargh"
 
 embedSingle :: Rel -> Representation -> Representation -> Representation
 embedSingle rel a rep = rep { embeds = embeds' }
@@ -64,7 +73,16 @@ data Link = Link
 instance FromJSON Link
 instance ToJSON Link
 
-type Links = HashMap Rel Link
+type Links = HashMap Rel LinkGroup
+
+data LinkGroup
+  = SingletonLink Link
+  | LinkArray (HashMap URI Link)
+  deriving (Show)
+
+instance ToJSON LinkGroup where
+  toJSON (SingletonLink l) = toJSON l
+  toJSON (LinkArray m) = toJSON $ fmap snd $ sortBy (comparing fst) $ toList m
 
 type Embeds = HashMap Rel EmbedGroup
 
@@ -85,8 +103,5 @@ condenseEmbeds r@Representation{..} = case self of
 condenseLinks :: Representation -> Representation
 condenseLinks r@Representation{..} = case self of
   Object o -> r { self = Object $ insert "_links" (toJSON links') o }
-    where links' = addLink selfRel "self" links
+    where links' = insert "self" (SingletonLink selfRel) links
   _ -> error "blargh"
-
-addLink :: Link -> Rel -> Links -> Links
-addLink l rel ls = insert rel l ls

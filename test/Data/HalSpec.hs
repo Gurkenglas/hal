@@ -25,10 +25,10 @@ spec = do
       pointTo "/bar" json `shouldBe` Right (Number 42)
     it "encodes a link to self at the self rel in links" $ do
       pointTo "/_links/self/href" json `shouldBe` Right "http://foo.test/ex/1"
-  describe "object with one link added" $ do
+  describe "object with one singleton link added" $ do
     let ex = Ex { foo = "baz", bar = 42 }
         l = link "http://static.test/images/ex/1"
-        rep = linkTo "icon" l $ represent ex "http://foo.test/ex/1"
+        rep = linkSingle "icon" l $ represent ex "http://foo.test/ex/1"
     it "encodes the basic state at the root" $ do
       pointTo "/foo" (toJSON rep) `shouldBe` Right "baz"
       pointTo "/bar" (toJSON rep) `shouldBe` Right (Number 42)
@@ -36,6 +36,17 @@ spec = do
       pointTo "/_links/self/href" (toJSON rep) `shouldBe` Right "http://foo.test/ex/1"
     it "encodes the added link at the given rel in links" $ do
       pointTo "/_links/icon/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/1"
+  describe "object with one link in an array" $ do
+    let ex = Ex { foo = "baz", bar = 42 }
+        l = link "http://static.test/images/ex/1"
+        rep = linkMulti "icons" l $ represent ex "http://foo.test/ex/1"
+    it "encodes the basic state at the root" $ do
+      pointTo "/foo" (toJSON rep) `shouldBe` Right "baz"
+      pointTo "/bar" (toJSON rep) `shouldBe` Right (Number 42)
+    it "encodes a link to self at the self rel in links" $ do
+      pointTo "/_links/self/href" (toJSON rep) `shouldBe` Right "http://foo.test/ex/1"
+    it "encodes the added link at the given rel in links" $ do
+      pointTo "/_links/icons/0/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/1"
   describe "object with one singleton embed added" $ do
     let ex = Ex { foo = "baz", bar = 42 }
         embedded = Ex { foo = "quux", bar = 3 }
