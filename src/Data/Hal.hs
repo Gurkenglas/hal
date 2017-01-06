@@ -16,51 +16,11 @@ module Data.Hal
   ) where
 
 import GHC.Generics
-import Data.Aeson
+import Data.Aeson hiding (Array)
 import Data.HashMap.Strict
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.Text (Text)
-
-represent :: ToJSON a => a -> URI -> Representation
-represent val uri = Representation
-  { self = toJSON val
-  , selfRel = Link uri
-  , links = empty
-  , embeds = empty
-  }
-
-link :: URI -> Link
-link = Link
-
-linkSingle :: Rel -> Link -> Representation -> Representation
-linkSingle rel l rep = rep { links = insert rel (SingletonLink l) $ links rep }
-
-linkMulti :: Rel -> Link -> Representation -> Representation
-linkMulti rel l rep = rep { links = alter f rel $ links rep }
-  where f Nothing = Just $ LinkArray $ singleton (href l) l
-        f (Just (LinkArray m)) = Just $ LinkArray $ insert (href l) l m
-        f (Just (SingletonLink _)) = error "blargh"
-
-embedSingle :: Rel -> Representation -> Representation -> Representation
-embedSingle rel a rep = rep { embeds = embeds' }
-  where embeds' = insert rel (SingletonEmbed a) $ embeds rep
-
-embedMulti :: Rel -> Representation -> Representation -> Representation
-embedMulti rel a rep = rep { embeds = alter f rel $ embeds rep }
-  where f Nothing = Just $ EmbedArray $ singleton (href $ selfRel a) a
-        f (Just (EmbedArray m)) = Just $ EmbedArray $ insert (href $ selfRel a) a m
-        f (Just (SingletonEmbed _)) = error "blargh"
-
-data Representation = Representation
-  { self :: Value
-  , selfRel :: Link
-  , links :: Links
-  , embeds :: Embeds
-  } deriving (Show, Generic)
-
-instance ToJSON Representation where
-  toJSON = self . condenseEmbeds . condenseLinks
 
 type URI = Text
 
@@ -73,35 +33,71 @@ data Link = Link
 instance FromJSON Link
 instance ToJSON Link
 
-type Links = HashMap Rel LinkGroup
+link :: URI -> Link
+link = Link
 
-data LinkGroup
-  = SingletonLink Link
-  | LinkArray (HashMap URI Link)
+data Representation = Representation
+  { value :: Value
+  , self :: Link
+  , links :: Links
+  , embeds :: Embeds
+  } deriving (Show, Generic)
+
+instance ToJSON Representation where
+  toJSON = value . condenseEmbeds . condenseLinks
+
+represent :: ToJSON a => a -> URI -> Representation
+represent val uri = Representation
+  { value = toObj $ toJSON val
+  , self = Link uri
+  , links = empty
+  , embeds = empty
+  }
+
+linkSingle :: Rel -> Link -> Representation -> Representation
+linkSingle rel l rep = rep { links = insert rel (Singleton l) $ links rep }
+
+linkMulti :: Rel -> Link -> Representation -> Representation
+linkMulti rel l rep = rep { links = alter f rel $ links rep }
+  where f = Just . addToMultiGroup (href l) l
+
+embedSingle :: Rel -> Representation -> Representation -> Representation
+embedSingle rel a rep = rep { embeds = insert rel (Singleton a) $ embeds rep }
+
+embedMulti :: Rel -> Representation -> Representation -> Representation
+embedMulti rel a rep = rep { embeds = alter f rel $ embeds rep }
+  where f = Just . addToMultiGroup (href $ self a) a
+
+
+type Links = HashMap Rel (Group Link)
+
+type Embeds = HashMap Rel (Group Representation)
+
+data Group a
+  = Singleton a
+  | Array (HashMap URI a)
   deriving (Show)
 
-instance ToJSON LinkGroup where
-  toJSON (SingletonLink l) = toJSON l
-  toJSON (LinkArray m) = toJSON $ fmap snd $ sortBy (comparing fst) $ toList m
+instance ToJSON a => ToJSON (Group a) where
+  toJSON (Singleton a) = toJSON a
+  toJSON (Array as) = toJSON . fmap snd . sortBy (comparing fst) $ toList as
 
-type Embeds = HashMap Rel EmbedGroup
-
-data EmbedGroup
-  = SingletonEmbed Representation
-  | EmbedArray (HashMap URI Representation)
-  deriving (Show)
-
-instance ToJSON EmbedGroup where
-  toJSON (SingletonEmbed r) = toJSON r
-  toJSON (EmbedArray m) = toJSON $ fmap snd $ sortBy (comparing fst) $ toList m
+addToMultiGroup :: URI -> a -> Maybe (Group a) -> Group a
+addToMultiGroup u a Nothing = Array $ singleton u a
+addToMultiGroup u a (Just (Array m)) = Array $ insert u a m
+addToMultiGroup _ _ (Just (Singleton _)) = error "Can’t add to a singleton."
 
 condenseEmbeds :: Representation -> Representation
-condenseEmbeds r@Representation{..} = case self of
-  Object o -> r { self = Object $ insert "_embedded" (toJSON embeds) o }
-  _ -> error "blargh"
+condenseEmbeds r@Representation{..} = case value of
+  Object o -> r { value = Object $ insert "_embedded" (toJSON embeds) o }
+  v -> condenseEmbeds $ r { value = toObj v }
 
 condenseLinks :: Representation -> Representation
-condenseLinks r@Representation{..} = case self of
-  Object o -> r { self = Object $ insert "_links" (toJSON links') o }
-    where links' = insert "self" (SingletonLink selfRel) links
-  _ -> error "blargh"
+condenseLinks r@Representation{..} = case value of
+  Object o -> r { value = Object $ insert "_links" (toJSON links') o }
+    where links' = insert "self" (Singleton self) links
+  v -> condenseLinks $ r { value = toObj v }
+
+toObj :: Value -> Value
+toObj o@(Object _) = o
+toObj a = object [("self", a)]
