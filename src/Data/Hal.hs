@@ -26,15 +26,15 @@ represent val uri = Representation
   , embeds = empty
   }
 
-linkTo :: Link -> Rel -> Representation -> Representation
-linkTo l rel rep = rep { links = addLink l rel $ links rep }
+linkTo :: Rel -> Link -> Representation -> Representation
+linkTo rel l rep = rep { links = addLink l rel $ links rep }
 
 embedSingle :: Rel -> Representation -> Representation -> Representation
-embedSingle label a rep = rep { embeds = embeds' }
-  where embeds' = insert label (SingletonEmbed a) $ embeds rep
+embedSingle rel a rep = rep { embeds = embeds' }
+  where embeds' = insert rel (SingletonEmbed a) $ embeds rep
 
 embedMulti :: Rel -> Representation -> Representation -> Representation
-embedMulti label a rep = rep { embeds = alter f label $ embeds rep }
+embedMulti rel a rep = rep { embeds = alter f rel $ embeds rep }
   where f Nothing = Just $ EmbedArray $ singleton (href $ selfRel a) a
         f (Just (EmbedArray m)) = Just $ EmbedArray $ insert (href $ selfRel a) a m
         f (Just (SingletonEmbed _)) = error "blargh"

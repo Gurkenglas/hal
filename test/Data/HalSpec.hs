@@ -28,7 +28,7 @@ spec = do
   describe "object with one link added" $ do
     let ex = Ex { foo = "baz", bar = 42 }
         link = Link { href = "http://static.test/images/ex/1" }
-        rep = linkTo link "icon" $ represent ex "http://foo.test/ex/1"
+        rep = linkTo "icon" link $ represent ex "http://foo.test/ex/1"
     it "encodes the basic state at the root" $ do
       pointTo "/foo" (toJSON rep) `shouldBe` Right "baz"
       pointTo "/bar" (toJSON rep) `shouldBe` Right (Number 42)
