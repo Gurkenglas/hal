@@ -26,14 +26,14 @@ represent val uri = Representation
   , embeds = empty
   }
 
-linkTo :: Link -> Text -> Representation -> Representation
+linkTo :: Link -> Rel -> Representation -> Representation
 linkTo l rel rep = rep { links = addLink l rel $ links rep }
 
-embedSingle :: Text -> Representation -> Representation -> Representation
+embedSingle :: Rel -> Representation -> Representation -> Representation
 embedSingle label a rep = rep { embeds = embeds' }
   where embeds' = insert label (SingletonEmbed a) $ embeds rep
 
-embedMulti :: Text -> Representation -> Representation -> Representation
+embedMulti :: Rel -> Representation -> Representation -> Representation
 embedMulti label a rep = rep { embeds = alter f label $ embeds rep }
   where f Nothing = Just $ EmbedArray $ singleton (href $ selfRel a) a
         f (Just (EmbedArray m)) = Just $ EmbedArray $ insert (href $ selfRel a) a m
@@ -51,6 +51,8 @@ instance ToJSON Representation where
 
 type URI = Text
 
+type Rel = Text
+
 data Link = Link
   { href    :: URI
   } deriving (Show, Generic)
@@ -58,9 +60,9 @@ data Link = Link
 instance FromJSON Link
 instance ToJSON Link
 
-type Links = HashMap Text Link
+type Links = HashMap Rel Link
 
-type Embeds = HashMap Text EmbedGroup
+type Embeds = HashMap Rel EmbedGroup
 
 data EmbedGroup
   = SingletonEmbed Representation
@@ -82,5 +84,5 @@ condenseLinks r@Representation{..} = case self of
     where links' = addLink selfRel "self" links
   _ -> error "blargh"
 
-addLink :: Link -> Text -> Links -> Links
+addLink :: Link -> Rel -> Links -> Links
 addLink l rel ls = insert rel l ls
