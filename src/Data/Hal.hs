@@ -3,7 +3,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Data.Hal
-  ( Link(..)
+  ( Link
+  , link
   , Representation
   , represent
   , linkTo
@@ -25,6 +26,9 @@ represent val uri = Representation
   , links = empty
   , embeds = empty
   }
+
+link :: URI -> Link
+link = Link
 
 linkTo :: Rel -> Link -> Representation -> Representation
 linkTo rel l rep = rep { links = addLink l rel $ links rep }
