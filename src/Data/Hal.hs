@@ -11,8 +11,10 @@ module Data.Hal
   , represent
   , linkSingle
   , linkMulti
+  , linkList
   , embedSingle
   , embedMulti
+  , embedList
   ) where
 
 import GHC.Generics
@@ -61,12 +63,20 @@ linkMulti :: Rel -> Link -> Representation -> Representation
 linkMulti rel l rep = rep { links = alter f rel $ links rep }
   where f = Just . addToMultiGroup (href l) l
 
+linkList :: Rel -> [Link] -> Representation -> Representation
+linkList rel ls rep = rep { links = insert rel (Array ls') $ links rep }
+  where ls' = fromList $ fmap (\l -> (href l, l)) ls
+
 embedSingle :: Rel -> Representation -> Representation -> Representation
 embedSingle rel a rep = rep { embeds = insert rel (Singleton a) $ embeds rep }
 
 embedMulti :: Rel -> Representation -> Representation -> Representation
 embedMulti rel a rep = rep { embeds = alter f rel $ embeds rep }
   where f = Just . addToMultiGroup (href $ self a) a
+
+embedList :: Rel -> [Representation] -> Representation -> Representation
+embedList rel as rep = rep { embeds = insert rel (Array as') $ embeds rep }
+  where as' = fromList $ fmap (\a -> (href $ self a, a)) as
 
 
 type Links = HashMap Rel (Group Link)
