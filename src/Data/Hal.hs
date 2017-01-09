@@ -5,6 +5,7 @@
 module Data.Hal
   ( Rel
   , URI
+  , HasProfile(..)
   , Link
   , link
   , Representation
@@ -28,15 +29,20 @@ type URI = Text
 
 type Rel = Text
 
+class HasProfile a where
+  profileOf :: a -> Maybe URI
+
 data Link = Link
   { href    :: URI
+  , profile :: Maybe Text
   } deriving (Show, Generic)
 
-instance FromJSON Link
 instance ToJSON Link
 
-link :: URI -> Link
-link = Link
+link :: HasProfile a => URI -> a -> Link
+link uri a = Link { href = uri
+                  , profile = profileOf a
+                  }
 
 data Representation = Representation
   { value :: Value
@@ -48,10 +54,10 @@ data Representation = Representation
 instance ToJSON Representation where
   toJSON = value . condenseEmbeds . condenseLinks
 
-represent :: ToJSON a => a -> URI -> Representation
+represent :: (HasProfile a, ToJSON a) => a -> URI -> Representation
 represent val uri = Representation
   { value = toObj $ toJSON val
-  , self = Link uri
+  , self = link uri val
   , links = empty
   , embeds = empty
   }
