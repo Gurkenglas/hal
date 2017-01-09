@@ -22,7 +22,6 @@ library
   ghc-options:          -Wall
   build-depends:        base >= 4.7 && < 5
                       , aeson
-                      , aeson-pretty
                       , text
                       , unordered-containers
   hs-source-dirs:       src
