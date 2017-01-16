@@ -19,10 +19,11 @@ module Data.Hal
   ) where
 
 import GHC.Generics
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Data.Aeson hiding (Array)
 import qualified Data.HashMap.Strict as H
 import Data.List (sortBy)
+import Data.Maybe (catMaybes)
 import Data.Ord (comparing)
 import Data.Text (Text)
 
@@ -34,16 +35,23 @@ class HasProfile a where
   profileOf :: a -> Maybe URI
 
 data Link = Link
-  { href    :: URI
-  , profile :: Maybe Text
+  { _href    :: URI
+  , _profile :: Maybe Text
   } deriving (Show, Generic)
 
-instance ToJSON Link
+makeLenses ''Link
+
+instance ToJSON Link where
+  toJSON (Link h p) =
+    object $ catMaybes $ [ Just ("href" .= h)
+                         , ("profile" .=) <$> p
+                         ]
 
 link :: HasProfile a => URI -> a -> Link
-link uri a = Link { href = uri
-                  , profile = profileOf a
-                  }
+link uri a = Link
+  { _href = uri
+  , _profile = profileOf a
+  }
 
 data Group a
   = Singleton a
@@ -83,22 +91,22 @@ linkSingle rel = over links . H.insert rel . Singleton
 
 linkMulti :: Rel -> Link -> Representation -> Representation
 linkMulti rel l = over links $ H.alter f rel
-  where f = Just . addToMultiGroup (href l) l
+  where f = Just . addToMultiGroup (l^.href) l
 
 linkList :: Rel -> [Link] -> Representation -> Representation
 linkList rel = over links . H.insert rel . Array . H.fromList . map f
-  where f l = (href l, l)
+  where f l = (l^.href, l)
 
 embedSingle :: Rel -> Representation -> Representation -> Representation
 embedSingle rel = over embeds . H.insert rel . Singleton
 
 embedMulti :: Rel -> Representation -> Representation -> Representation
 embedMulti rel a = over embeds $ H.alter f rel
-  where f = Just . addToMultiGroup (href $ a^.self) a
+  where f = Just . addToMultiGroup (a^.self.href) a
 
 embedList :: Rel -> [Representation] -> Representation -> Representation
 embedList rel = over embeds . H.insert rel . Array . H.fromList . map f
-  where f a = (href $ a^.self, a)
+  where f a = (a^.self.href, a)
 
 
 addToMultiGroup :: URI -> a -> Maybe (Group a) -> Group a
