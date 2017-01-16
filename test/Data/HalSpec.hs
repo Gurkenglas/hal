@@ -173,6 +173,20 @@ spec = do
       pointTo "/_embedded/xs/2/foo" (toJSON rep) `shouldBe` Right "quux"
       pointTo "/_embedded/xs/2/bar" (toJSON rep) `shouldBe` Right (Number 4)
 
+  describe "bare object with one embed in an array" $ do
+    let ex = Ex { foo = "baz", bar = 42 }
+        embedded = Ex { foo = "quux", bar = 3 }
+        rep = embedMulti "xs" (represent embedded "http://foo.test/ex/2")
+              $ bare ex
+    it "encodes the basic state at the root" $ do
+      pointTo "/foo" (toJSON rep) `shouldBe` Right "baz"
+      pointTo "/bar" (toJSON rep) `shouldBe` Right (Number 42)
+    it "embeds the additional object in an array" $ do
+      pointTo "/_embedded/xs/0/foo" (toJSON rep) `shouldBe` Right "quux"
+      pointTo "/_embedded/xs/0/bar" (toJSON rep) `shouldBe` Right (Number 3)
+    it "includes the self rel for the embedded object" $ do
+      pointTo "/_embedded/xs/0/_links/self/href" (toJSON rep) `shouldBe` Right "http://foo.test/ex/2"
+
 toPtr :: Text -> Pointer
 toPtr t = let Right p = unescape t in p
 
