@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Data.Hal
   ( Rel
@@ -19,6 +19,7 @@ module Data.Hal
   ) where
 
 import GHC.Generics
+import Control.Lens
 import Data.Aeson hiding (Array)
 import qualified Data.HashMap.Strict as H
 import Data.List (sortBy)
@@ -44,51 +45,6 @@ link uri a = Link { href = uri
                   , profile = profileOf a
                   }
 
-data Representation = Representation
-  { value :: Value
-  , self :: Link
-  , links :: Links
-  , embeds :: Embeds
-  } deriving (Show, Generic)
-
-instance ToJSON Representation where
-  toJSON = value . condenseEmbeds . condenseLinks
-
-represent :: (HasProfile a, ToJSON a) => a -> URI -> Representation
-represent val uri = Representation
-  { value = toObj $ toJSON val
-  , self = link uri val
-  , links = H.empty
-  , embeds = H.empty
-  }
-
-linkSingle :: Rel -> Link -> Representation -> Representation
-linkSingle rel l rep = rep { links = H.insert rel (Singleton l) $ links rep }
-
-linkMulti :: Rel -> Link -> Representation -> Representation
-linkMulti rel l rep = rep { links = H.alter f rel $ links rep }
-  where f = Just . addToMultiGroup (href l) l
-
-linkList :: Rel -> [Link] -> Representation -> Representation
-linkList rel ls rep = rep { links = H.insert rel (Array ls') $ links rep }
-  where ls' = H.fromList $ fmap (\l -> (href l, l)) ls
-
-embedSingle :: Rel -> Representation -> Representation -> Representation
-embedSingle rel a rep = rep { embeds = H.insert rel (Singleton a) $ embeds rep }
-
-embedMulti :: Rel -> Representation -> Representation -> Representation
-embedMulti rel a rep = rep { embeds = H.alter f rel $ embeds rep }
-  where f = Just . addToMultiGroup (href $ self a) a
-
-embedList :: Rel -> [Representation] -> Representation -> Representation
-embedList rel as rep = rep { embeds = H.insert rel (Array as') $ embeds rep }
-  where as' = H.fromList $ fmap (\a -> (href $ self a, a)) as
-
-
-type Links = H.HashMap Rel (Group Link)
-
-type Embeds = H.HashMap Rel (Group Representation)
-
 data Group a
   = Singleton a
   | Array (H.HashMap URI a)
@@ -98,21 +54,70 @@ instance ToJSON a => ToJSON (Group a) where
   toJSON (Singleton a) = toJSON a
   toJSON (Array as) = toJSON . fmap snd . sortBy (comparing fst) $ H.toList as
 
+type Links = H.HashMap Rel (Group Link)
+
+type Embeds = H.HashMap Rel (Group Representation)
+
+data Representation = Representation
+  { _value :: Value
+  , _self :: Link
+  , _links :: Links
+  , _embeds :: Embeds
+  } deriving (Show, Generic)
+
+makeLenses ''Representation
+
+instance ToJSON Representation where
+  toJSON = view value . condenseEmbeds . condenseLinks
+
+represent :: (HasProfile a, ToJSON a) => a -> URI -> Representation
+represent val uri = Representation
+  { _value = toObj $ toJSON val
+  , _self = link uri val
+  , _links = H.empty
+  , _embeds = H.empty
+  }
+
+linkSingle :: Rel -> Link -> Representation -> Representation
+linkSingle rel = over links . H.insert rel . Singleton
+
+linkMulti :: Rel -> Link -> Representation -> Representation
+linkMulti rel l = over links $ H.alter f rel
+  where f = Just . addToMultiGroup (href l) l
+
+linkList :: Rel -> [Link] -> Representation -> Representation
+linkList rel = over links . H.insert rel . Array . H.fromList . map f
+  where f l = (href l, l)
+
+embedSingle :: Rel -> Representation -> Representation -> Representation
+embedSingle rel = over embeds . H.insert rel . Singleton
+
+embedMulti :: Rel -> Representation -> Representation -> Representation
+embedMulti rel a = over embeds $ H.alter f rel
+  where f = Just . addToMultiGroup (href $ a^.self) a
+
+embedList :: Rel -> [Representation] -> Representation -> Representation
+embedList rel = over embeds . H.insert rel . Array . H.fromList . map f
+  where f a = (href $ a^.self, a)
+
+
 addToMultiGroup :: URI -> a -> Maybe (Group a) -> Group a
 addToMultiGroup u a Nothing = Array $ H.singleton u a
 addToMultiGroup u a (Just (Array m)) = Array $ H.insert u a m
 addToMultiGroup _ _ (Just (Singleton _)) = error "Can’t add to a singleton."
 
 condenseEmbeds :: Representation -> Representation
-condenseEmbeds r@Representation{..} = case value of
-  Object o -> r { value = Object $ H.insert "_embedded" (toJSON embeds) o }
-  v -> condenseEmbeds $ r { value = toObj v }
+condenseEmbeds r = case r^.value of
+  Object o -> value .~ (Object $ H.insert "_embedded" (toJSON $ r^.embeds) o) $ r
+  v -> condenseEmbeds $ value .~ toObj v $ r
 
 condenseLinks :: Representation -> Representation
-condenseLinks r@Representation{..} = case value of
-  Object o -> r { value = Object $ H.insert "_links" (toJSON links') o }
-    where links' = H.insert "self" (Singleton self) links
-  v -> condenseLinks $ r { value = toObj v }
+condenseLinks r = case r^.value of
+  Object o -> value .~ (Object $ H.insert "_links" (toJSON $ linksWithSelf r) o) $ r
+  v -> condenseLinks $ value .~ toObj v $ r
+
+linksWithSelf :: Representation -> Links
+linksWithSelf r = H.insert "self" (Singleton (r^.self)) (r^.links)
 
 toObj :: Value -> Value
 toObj o@(Object _) = o
