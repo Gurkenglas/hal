@@ -37,6 +37,9 @@ type Rel = Text
 class HasProfile a where
   profileOf :: a -> Maybe URI
 
+instance HasProfile Text where
+  profileOf = Just
+
 data Link = Link
   { _href    :: URI
   , _profile :: Maybe Text
