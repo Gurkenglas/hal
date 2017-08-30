@@ -3,9 +3,9 @@ module Data.HalSpec (spec) where
 import Data.Hal
 
 import Data.Aeson
-import JSONPointer
 import Data.Text
 import GHC.Generics
+import JSONPointer
 import Test.Hspec
 import Test.QuickCheck
 
@@ -63,25 +63,25 @@ spec = do
 
   describe "object with two links in the same array" $ do
     let ex = Ex { foo = "baz", bar = 42 }
-        l1 = link "http://static.test/images/ex/1" Icon
         l2 = link "http://static.test/images/ex/2" Icon
-        rep = linkMulti "icons" l2 $ linkMulti "icons" l1 $ represent ex "http://foo.test/ex/1"
+        l1 = link "http://static.test/images/ex/1" Icon
+        rep = linkMulti "icons" l1 $ linkMulti "icons" l2 $ represent ex "http://foo.test/ex/1"
     it "encodes the basic state at the root" $ do
       pointTo "/foo" (toJSON rep) `shouldBe` Right "baz"
       pointTo "/bar" (toJSON rep) `shouldBe` Right (Number 42)
     it "encodes a link to self at the self rel in links" $ do
       pointTo "/_links/self/href" (toJSON rep) `shouldBe` Right "http://foo.test/ex/1"
     it "encodes both links in the same array" $ do
-      pointTo "/_links/icons/0/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/1"
+      pointTo "/_links/icons/0/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/2"
       pointTo "/_links/icons/0/profile" (toJSON rep) `shouldBe` Right "http://foo.doc/types/icon"
-      pointTo "/_links/icons/1/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/2"
+      pointTo "/_links/icons/1/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/1"
       pointTo "/_links/icons/1/profile" (toJSON rep) `shouldBe` Right "http://foo.doc/types/icon"
 
   describe "object with three links added as a list" $ do
     let ex = Ex { foo = "baz", bar = 42 }
         ls = [ link "http://static.test/images/ex/1" Icon
-             , link "http://static.test/images/ex/2" Icon
              , link "http://static.test/images/ex/3" Icon
+             , link "http://static.test/images/ex/2" Icon
              ]
         rep = linkList "icons" ls $ represent ex "http://foo.test/ex/1"
     it "encodes the basic state at the root" $ do
@@ -92,9 +92,9 @@ spec = do
     it "encodes all links in the same array" $ do
       pointTo "/_links/icons/0/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/1"
       pointTo "/_links/icons/0/profile" (toJSON rep) `shouldBe` Right "http://foo.doc/types/icon"
-      pointTo "/_links/icons/1/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/2"
+      pointTo "/_links/icons/1/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/3"
       pointTo "/_links/icons/1/profile" (toJSON rep) `shouldBe` Right "http://foo.doc/types/icon"
-      pointTo "/_links/icons/2/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/3"
+      pointTo "/_links/icons/2/href" (toJSON rep) `shouldBe` Right "http://static.test/images/ex/2"
       pointTo "/_links/icons/2/profile" (toJSON rep) `shouldBe` Right "http://foo.doc/types/icon"
 
   describe "object with one singleton embed added" $ do
@@ -137,8 +137,8 @@ spec = do
     let ex1 = Ex { foo = "foo", bar = 1 }
         ex2 = Ex { foo = "bar", bar = 2 }
         ex3 = Ex { foo = "baz", bar = 3 }
-        rep = embedMulti "xs" (represent ex3 "http://foo.test/ex/3")
-              $ embedMulti "xs" (represent ex2 "http://foo.test/ex/2")
+        rep = embedMulti "xs" (represent ex2 "http://foo.test/ex/2")
+              $ embedMulti "xs" (represent ex3 "http://foo.test/ex/3")
               $ represent ex1 "http://foo.test/ex/1"
     it "encodes the basic state at the root" $ do
       pointTo "/foo" (toJSON rep) `shouldBe` Right "foo"
@@ -148,17 +148,17 @@ spec = do
     it "gives the object’s profile in the self rel" $ do
       pointTo "/_links/self/profile" (toJSON rep) `shouldBe` Right "http://foo.doc/types/ex"
     it "embeds both additional objects in the same array" $ do
-      pointTo "/_embedded/xs/0/foo" (toJSON rep) `shouldBe` Right "bar"
-      pointTo "/_embedded/xs/1/foo" (toJSON rep) `shouldBe` Right "baz"
+      pointTo "/_embedded/xs/0/foo" (toJSON rep) `shouldBe` Right "baz"
+      pointTo "/_embedded/xs/1/foo" (toJSON rep) `shouldBe` Right "bar"
 
   describe "object with three embeds added as a list" $ do
     let ex1 = Ex { foo = "foo", bar = 1 }
         ex2 = Ex { foo = "bar", bar = 2 }
         ex3 = Ex { foo = "baz", bar = 3 }
         ex4 = Ex { foo = "quux", bar = 4 }
-        rep = embedList "xs" [ represent ex2 "http://foo.test/ex/2"
+        rep = embedList "xs" [ represent ex4 "http://foo.test/ex/4"
                              , represent ex3 "http://foo.test/ex/3"
-                             , represent ex4 "http://foo.test/ex/4"
+                             , represent ex2 "http://foo.test/ex/2"
                              ] $ represent ex1 "http://foo.test/ex/1"
     it "encodes the basic state at the root" $ do
       pointTo "/foo" (toJSON rep) `shouldBe` Right "foo"
@@ -166,12 +166,12 @@ spec = do
     it "encodes a link to self at the self rel in links" $ do
       pointTo "/_links/self/href" (toJSON rep) `shouldBe` Right "http://foo.test/ex/1"
     it "encodes all embeds in the same array" $ do
-      pointTo "/_embedded/xs/0/foo" (toJSON rep) `shouldBe` Right "bar"
-      pointTo "/_embedded/xs/0/bar" (toJSON rep) `shouldBe` Right (Number 2)
+      pointTo "/_embedded/xs/0/foo" (toJSON rep) `shouldBe` Right "quux"
+      pointTo "/_embedded/xs/0/bar" (toJSON rep) `shouldBe` Right (Number 4)
       pointTo "/_embedded/xs/1/foo" (toJSON rep) `shouldBe` Right "baz"
       pointTo "/_embedded/xs/1/bar" (toJSON rep) `shouldBe` Right (Number 3)
-      pointTo "/_embedded/xs/2/foo" (toJSON rep) `shouldBe` Right "quux"
-      pointTo "/_embedded/xs/2/bar" (toJSON rep) `shouldBe` Right (Number 4)
+      pointTo "/_embedded/xs/2/foo" (toJSON rep) `shouldBe` Right "bar"
+      pointTo "/_embedded/xs/2/bar" (toJSON rep) `shouldBe` Right (Number 2)
 
   describe "bare object with one embed in an array" $ do
     let ex = Ex { foo = "baz", bar = 42 }

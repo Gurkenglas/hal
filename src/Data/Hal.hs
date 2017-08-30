@@ -24,10 +24,10 @@ module Data.Hal
 import GHC.Generics
 import Control.Lens hiding ((.=))
 import Data.Aeson hiding (Array)
+import Data.Foldable
 import qualified Data.HashMap.Strict as H
-import Data.List (sortBy)
 import Data.Maybe (catMaybes)
-import Data.Ord (comparing)
+import qualified Data.Sequence as S
 import Data.Text (Text)
 
 type URI = Text
@@ -61,12 +61,12 @@ link uri a = Link
 
 data Group a
   = Singleton a
-  | Array (H.HashMap URI a)
+  | Array (S.Seq a)
   deriving (Show)
 
 instance ToJSON a => ToJSON (Group a) where
   toJSON (Singleton a) = toJSON a
-  toJSON (Array as) = toJSON . fmap snd . sortBy (comparing fst) $ H.toList as
+  toJSON (Array as) = toJSON $ toList as
 
 type Links = H.HashMap Rel (Group Link)
 
@@ -133,28 +133,26 @@ linkSingle rel = over links . H.insert rel . Singleton
 
 linkMulti :: Condensible a => Rel -> Link -> a -> a
 linkMulti rel l = over links $ H.alter f rel
-  where f = Just . addToMultiGroup (l^.href) l
+  where f = Just . addToMultiGroup l
 
 linkList :: Condensible a => Rel -> [Link] -> a -> a
-linkList rel = over links . H.insert rel . Array . H.fromList . map f
-  where f l = (l^.href, l)
+linkList rel = over links . H.insert rel . Array . S.fromList
 
 embedSingle :: Condensible a => Rel -> Representation -> a -> a
 embedSingle rel = over embeds . H.insert rel . Singleton
 
 embedMulti :: Condensible a => Rel -> Representation -> a -> a
 embedMulti rel a = over embeds $ H.alter f rel
-  where f = Just . addToMultiGroup (a^.self.href) a
+  where f = Just . addToMultiGroup a
 
 embedList :: Condensible a => Rel -> [Representation] -> a -> a
-embedList rel = over embeds . H.insert rel . Array . H.fromList . map f
-  where f a = (a^.self.href, a)
+embedList rel = over embeds . H.insert rel . Array . S.fromList
 
 
-addToMultiGroup :: URI -> a -> Maybe (Group a) -> Group a
-addToMultiGroup u a Nothing = Array $ H.singleton u a
-addToMultiGroup u a (Just (Array m)) = Array $ H.insert u a m
-addToMultiGroup _ _ (Just (Singleton _)) = error "Can’t add to a singleton."
+addToMultiGroup :: a -> Maybe (Group a) -> Group a
+addToMultiGroup a Nothing = Array $ S.singleton a
+addToMultiGroup a (Just (Array m)) = Array $ m S.|> a
+addToMultiGroup _ (Just (Singleton _)) = error "Can’t add to a singleton."
 
 condenseEmbeds :: Condensible a => a -> a
 condenseEmbeds r = case r^.value of
