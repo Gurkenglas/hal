@@ -3,7 +3,7 @@ module Data.HalSpec (spec) where
 import Data.Hal
 
 import Data.Aeson
-import Data.Aeson.Pointer
+import JSONPointer
 import Data.Text
 import GHC.Generics
 import Test.Hspec
